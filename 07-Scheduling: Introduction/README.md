@@ -236,3 +236,115 @@ B의 서브작업이 10MS동안 동작하는 동안 Hard Disk Drive에서는 I/O
 ![](../assets/images/07-Scheduling:%20Introduction/Overlap%20Allows%20Better%20Use%20Of%20Resources.png)
 
 이는 A를 통째로 먼저 실행시켰을 때보다 효율적이다.
+
+
+## Homework (Simulation)
+
+This program, scheduler.py, allows you to see how different schedulers perform under scheduling metrics such as response time, turnaround time, and total wait time. See the README for details.
+
+
+Questions
+1. Compute the response time and turnaround time when running three jobs of length 200 with the SJF and FIFO schedulers.
+
+답: SJF-400, FIFO-400
+
+```
+./scheduler.py -p SJF -l 200,200,200 -c
+ARG policy SJF
+ARG jlist 200,200,200
+
+Here is the job list, with the run time of each job: 
+  Job 0 ( length = 200.0 )
+  Job 1 ( length = 200.0 )
+  Job 2 ( length = 200.0 )
+```
+
+```
+./scheduler.py -p FIFO -l 200,200,200 -c
+ARG policy FIFO
+ARG jlist 200,200,200
+
+Here is the job list, with the run time of each job: 
+  Job 0 ( length = 200.0 )
+  Job 1 ( length = 200.0 )
+  Job 2 ( length = 200.0 )
+```
+
+2. Now do the same but with jobs of different lengths: 100, 200, and 300.
+   
+답: SJF-333, FIFO-333
+
+```
+./scheduler.py -p SJF -l 100,200,300
+ARG policy SJF
+ARG jlist 100,200,300
+
+Here is the job list, with the run time of each job: 
+  Job 0 ( length = 100.0 )
+  Job 1 ( length = 200.0 )
+  Job 2 ( length = 300.0 )
+
+
+Compute the turnaround time, response time, and wait time for each job.
+When you are done, run this program again, with the same arguments,
+but with -c, which will thus provide you with the answers. You can use
+-s <somenumber> or your own job list (-l 10,15,20 for example)
+to generate different problems for yourself.
+```
+
+```
+./scheduler.py -p FIFO -l 100,200,300
+ARG policy FIFO
+ARG jlist 100,200,300
+
+Here is the job list, with the run time of each job: 
+  Job 0 ( length = 100.0 )
+  Job 1 ( length = 200.0 )
+  Job 2 ( length = 300.0 )
+
+
+Compute the turnaround time, response time, and wait time for each job.
+When you are done, run this program again, with the same arguments,
+but with -c, which will thus provide you with the answers. You can use
+-s <somenumber> or your own job list (-l 10,15,20 for example)
+to generate different problems for yourself.
+
+```
+
+3. Now do the same, but also with the RR scheduler and a time-slice of 1.
+
+답: 465
+
+```
+./scheduler.py -p RR -l 100,200,300 -q 1
+ARG policy RR
+ARG jlist 100,200,300
+
+Here is the job list, with the run time of each job:
+  Job 0 ( length = 100.0 )
+  Job 1 ( length = 200.0 )
+  Job 2 ( length = 300.0 )
+
+
+Compute the turnaround time, response time, and wait time for each job.
+When you are done, run this program again, with the same arguments,
+but with -c, which will thus provide you with the answers. You can use
+-s <somenumber> or your own job list (-l 10,15,20 for example)
+to generate different problems for yourself.
+```
+
+5. For what types of workloads does SJF deliver the same turnaround times as FIFO?
+
+답: 먼저들어올수록 작은길이의 작업인 경우
+
+6. For what types of workloads and quantum lengths does SJF deliver the same response times as RR?
+
+답: 200이상
+
+7. What happens to response time with SJF as job lengths increase? Can you use the simulator to demonstrate the trend?
+
+답: 작업의 길이가 커질수록 Response Time도 커진다. 사용할 수 없다.
+
+8. What happens to response time with RR as quantum lengths in- crease? Can you write an equation that gives the worst-case re- sponse time, given N jobs?
+
+답: response time은 N (jobs) * quantum length 만큼 늘어난다.
