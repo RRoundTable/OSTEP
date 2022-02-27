@@ -103,3 +103,75 @@ Process List를 `counter`의 값이 `winner`를 초과할 때까지 탐색한다
 위의 로직을 더 효율적으로 만들기 위해서는 Sorting이 필요할 것이다.
 내림차순으로 Sorting하게 되면 더 효율적이다.
 하지만 이런 정렬이 알고리즘의 정확도에는 영향을 끼치지 않는다.
+
+## 09-04 An Example
+
+Lottery Scheduling을 더 잘 이해하기 위해서 서로 경쟁적인 관계를 가지는 작업을 가지고 생각해볼 것이다.
+두 작업은 모두 같은 Running Time을 가지고 있으며 같은 수의 티켓을 가지고 있다.
+
+해당 예시에서 두 작업이 거의 유사한 시간에 끝나도록 스케쥴링할 것이다.(Lottery Scheduling의 불확실성때문에 한작업이 다른 작업보다 일찍 끝날 수 있다.)
+두 작업이 끝나는 시간의 차이를 정량적으로 측정하기 위해서 Faireness라는 매트릭을 정의할 것이다.
+
+$$
+F = \frac{\text{첫 번째 작업이 끝난 시간}}{\text{두 번째 작업이 끝난 시간}}
+$$
+
+만약 첫 번째 작업이 10초에 끝나고 두 번째 작업이 20초에 끝났다면 $\frac{10}{20}$의 Fairness를 가진다.
+첫 번째 작업과 두 번째 작업이 거의 동시에 끝났다면 Fairness는 1에 수렴할 것이다.
+
+아래의 그래프는 작업의 길이와 Fairness의 값에 관계를 표현했다.
+
+![](../assets/images/09-Lottery-Scheduling/figure-9-2.png)
+
+그래프에서 알 수 있듯이 작업의 길이가 짧으면 Fairness가 낮고 작업의 길이가 늘어날 수록 Fairness가 증가하는 것을 확인할 수 있다.
+
+
+
+## 09-05 How to Assign Tickets?
+
+그렇다면 어떻게 작업에 티켓을 배분할까?
+한가지 방법은 사용자에게 권한을 맡기는 것이다.
+사용자가 작업에 대해서 가장 잘 알 것이라 가정하고 작업에 티켓을 배분하도록 한다.
+하지만 이 방법은 해결책이라 부르기에는 명확하지 않다.
+따라서 아직까지는 티켓배분문제는 해결되지 않았다.
+
+## 09-06 Stride Scheduling
+
+Lottery Scheduler는 티켓을 배분하고나서 랜덤으로 티켓을 뽑는다.
+그렇다면 왜 랜덤하게 뽑을까?
+사실 랜덤하다면 정확하게 비율대로 작업이 실행되는 것을 보장하지 못한다.
+이런 이유로 Stride Scheduling이 제안되었고 Deterministic한 알고리즘이다.
+
+Stride Scheduling에서는 각 작업들은 Stride를 가지고 있으며 이는 작업이 가지고 있는 티켓수에 반비례한다.
+예를 들어 A, B, C 작업이 있고 각각 티켓을 100, 50, 250개를 가지고 있다고 했을 때,
+Stride는 어떤 한 큰 숫자를 가지고 있는 티켓수로 나누어 구하게 된다.
+만약 10000을 가지고 있는 티켓수로 나눈다면 A, B, C의 Stride는 각각 100, 200, 40가 된다.
+Process가 동작할 때마다 카운터는 증가할 것이고 카운터 값이 증가하면 이에 Stride * Counter를 하여 Pass Value가 결정된다.
+또한 이를 통해서 글로벌 진행상황을 파악할 수 있다.
+
+Stride Scheduler는 Stride를 사용하고 어떤 프로세스를 다음에 실행시킬지 결정한다.
+기본적인 아이디어는 간단하다.
+주어진 시간에 실행시킬 Process를 뽑는다.
+여기서 실행시킬 Process라는 것은 가장 낮은 Pass Value(Counter * Stride)를 가진 작업을 의미한다.
+의사코드는 다음과 같다.
+
+```
+curr = remove_min(queue);   // pick client with min pass
+schedule(curr);             // run for quantum
+curr->pass += curr->stride; // update pass using stride
+insert(queue, curr);        // return curr to queue
+```
+
+위의 A, B, C 작업의 예시를 보면 아래와 같다.
+
+![](../assets/images/09-Lottery-Scheduling/figure-9-3.png)
+
+처음에는 A, B, C 모두 Pass Value가 0이므로 A를 뽑았다고 가정했다.
+두 번재는 B, C중 B를 뽑았다고 가정하고
+나머지는 위의 의사코드를 그대로 진행한 것이다.
+
+위에서 보이는 것처럼 C가 5번 실행되며 이는 낮은 Stride값을 가지기 때문에 그렇다.
+
+다시 Lottery Scheduling과 Stride Scheduling을 비교해보자.
+사실 Lottery Schdueling은 Stride Schdueling이 가지고 있지 않은 좋은 성질을 가지고 있다.
+Global State를 파악할 필요가 없다는 게 장점이다.
