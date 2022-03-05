@@ -175,3 +175,56 @@ insert(queue, curr);        // return curr to queue
 다시 Lottery Scheduling과 Stride Scheduling을 비교해보자.
 사실 Lottery Schdueling은 Stride Schdueling이 가지고 있지 않은 좋은 성질을 가지고 있다.
 Global State를 파악할 필요가 없다는 게 장점이다.
+
+## 09-07 The Linux Complexity Fair Scheduler(CFS)
+
+현재 리눅스 운영체제에서 사용되고 있는 방법론도 다른 접근 방법으로 Fair한 Scheduler를 사용하고 있다.
+해당 Scheudler는 Complexity Fair Scheudler라고 불린다. (매우 효율적이고 확장성이 있다.)
+
+효율성을 높이기 위해서 CFS는 Scheduling Decision을 위해서 매우 적은 리소스를 사용한다.
+이는 설계구조와 데이터구조를 매우 효율적으로 사용하기 때문이다.
+최근 연구에서는 Scheduler의 효율성이 매우 중요하다는 것이 강조되었다.
+특히 구글 데이터센터의 Kanev et al은 매우 공격적인 최적화를 통하더라도 Schduling이 약 5%의 CPU Time를 사용하는 것을 밝혀냈다.
+
+### Basic Operation
+
+대부분의 Scheduler는 고정된 Time Slice를 사용하지만 CFS의 경우 조금 다르다.
+목적은 간단하다.
+CPU를 경쟁하는 Process들끼리 공정하게 나누기 위함이다.
+이를 위해서 Virtual Runtime을 활용한다.
+
+각 Process가 실행하면서 vruntime(Virtual Runtime)을 누적한다.
+대부분의 경우 각 Process의 vruntime은 물리적인 시간에 따라서 같은 비율로 증가한다.
+Scheduling Decision이 발생하면 CFS는 가장 낮은 vruntime을 가진 Process를 선택하여 실행시킨다.
+
+그렇다면 어떻게 Scheduler는 실행중인 Process가 정지해야하는 시점과 다음 Process를 실행시킬 시점을 알 수 있을까?
+CFS가 너무 자주 Process를 변경한다면 Fairness 점수는 증가하겠지만 전체적인 성능은 떨어질 것이다.
+그렇다고 너무 낮은 빈도로 Process를 변경한다면 Fairness 점수가 낮아질 것이다.
+
+CFS는 이런 Trade-Off를 다양한 제어 파라미터를 통해서 관리한다.
+첫 번째는 `sched_latency`이다.
+`sched_latency`는 Switch전에 한 Process를 얼마나 오래 실행시킬 것인지에 대한 파라미터이다.
+보통 일반적으로 48 MS를 사용한다.
+CFS는 `sched_latency`을 실행중인 Process의 수로 나누고 이를 Time Slice로 사용한다.
+그렇게 되면 `sched_latency`동안 실행중인 Process가 공평하게 CPU를 사용하게 된다.
+예를 들어 실행중인 Process가 4개인 경우 CFS는 `sched_latency`를 4로 나눈다.
+그럼 Time Slice는 12 MS가 된다.
+만약 가장 낮은 vruntime을 가지는 Process가 있다면 해당 Process를 실행시킨다.
+
+![](../assets/images/09-Lottery-Scheduling/figure-9-4.png)
+
+위의 그림은 A, B, C, D 프로세스가 실행중이고 중간에 C, D 프로세스가 끝나 A, B에 대해서 CFS가 적용된 것을 시각화 한 것이다.
+
+만약 실행중인 Process가 너무 많다면 어떻게 될까?
+너무 빈번한 Context Switching이 생기지 않을까?
+
+이런 문제를 해결하지 위해서 CFS는 `min_granularity`라는 파라미터를 사용한다.
+보통 6 MS로 설정되어 있다.
+CFS는 Time Slice를 `min_granularity`보다 낮게 설정하지 않는다.
+이는 너무 비번한 Context Switch를 방지한다.
+
+CFS는 Periodic Timer Interrupt를 사용한다.
+따라서 CFS는 고정된 시간간격마다 결정할 수 있다.
+Interrupt는 매 1MS마다 발생하며 CFS는 그때마다 결정할 수 있는 기회가 있다.
+만약 작업의 Time Slice가 완전히 Timer Interrupt Interval에 일치하지 않아도 큰 문제는 아니다.
+CFS가 vruntime을 정확히 측정하기 때문에 장기적으로보면 이상적인 CPU 공유가 될 것이다.
