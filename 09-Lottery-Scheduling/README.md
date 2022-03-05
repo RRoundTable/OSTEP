@@ -228,3 +228,85 @@ CFS는 Periodic Timer Interrupt를 사용한다.
 Interrupt는 매 1MS마다 발생하며 CFS는 그때마다 결정할 수 있는 기회가 있다.
 만약 작업의 Time Slice가 완전히 Timer Interrupt Interval에 일치하지 않아도 큰 문제는 아니다.
 CFS가 vruntime을 정확히 측정하기 때문에 장기적으로보면 이상적인 CPU 공유가 될 것이다.
+
+### Weighting (Niceness)
+
+CFS는 사용자 혹은 관리자에게 특정 Process의 CPU 이용비율을 조절함으로서 Process 우선순위를 조절할 수 있다.
+이것은 티켓에 대한 배분으로 하는 것이 아니라 UNIX의 `nice` 수준에 따라서 결정된다.
+`nice` 파라미터는 Process마다 -20에서 19의 값을 가질 수 있다. (Default 0)
+양수의 `nice`값은 낮은 우선순위를 뜻한다.
+반대로 음수의 `nice`값은 높은 우선순위를 의미한다.
+
+CFS는 각 Process의 `nice`값을 다음과 같이 Weight로 맵핑한다.
+
+```
+static const int prio_to_weight[40] = {
+       /* -20 */ 88761, 71755, 56483, 46273, 36291, /* -15 */ 29154, 23254, 18705, 14949, 11916, /* -10 */ 9548, 7620, 6100, 4904, 3906, /* -5 */ 3121, 2501, 1991, 1586, 1277, /* 0 */ 1024, 820, 655, 526, 423, /* 5*/ 335, 272, 215, 172, 137, /* 10 */ 110, 87, 70, 56, 45, /*15*/ 36, 29, 23, 18, 15,
+};
+```
+
+위의 Weight정보는 각 Process의 효과적인 Time Slice를 계산하는데 사용됩니다.
+하지만 우선순위의 차이는 표현하지 못합니다.
+아래 수식은 Time Slice를 구하는 식이다.
+
+$$
+\text{timeslice}_{\text{k}} = \frac{\text{weight}_{\text{k}}}{\sum_{i=0}^{n-1} \text{weight}_{\text{i}}} \dot \text{sched\_latency}
+$$
+
+이해를 돕기위해서 예를 들어보자.
+A와 B 작업이 있다고 해보자.
+A는 높은 우선순위를 가지고 있으며 `nice`값이 `-5`이다.(Weight 3121)
+B는 기본 우선순위를 가지고 있으며 `nice`값이 `0`이다. (Weight 1024)
+
+각 작업의 Time Slice를 계산해보면 A는 `0.75 * max(sched_latency, min_granularity)` B는 0.25 * max(sched_latency, min_granularity)``이다.
+
+CFS는 `vruntime`을 아래와 같이 누적계산한다.
+`vruntime`은 `Weight`가 클수록 더 작게 더해진다.
+따라서 `Weight`가 큰 Process는 `vruntime`이 느리게 누적되고 상대적으로 동작한 시간에 비해서 높은 우선순위를 유지할 수 있다.
+
+$$
+\text{vruntime}_i = \text{vruntime}_i + \frac{\text{weight}_0}{\text{weight}_i}\dot \text{runtime}_i
+$$
+- $\text{weight}_0$: Default Weight
+
+Weight Table은 `nice`값이 상수이면 CPU 비율을 유지할 수 있다는 것이 장점이다.
+예를 들어 A의 Weight값이 5이고 B의 Weight값이 10일 경우에도 비율대로 계산한다.
+즉, `nice` 자체적으로 특별한 의미가 있는 것이 아니고 상대적인 비율이 의미있기 떼문에 계산에 유연함을 준다.
+
+### Using Red-Black Trees
+
+CFS의 주요한 목표는 효율성이다.
+Scheduler에서는 효율성과 관련된 많은 부분이 있다.
+그 중하나는 Scheduler가 다음 작업을 찾아내고 이를 가능한 빠르게 실행시키는 것이다.
+
+리스트와 같은 간단한 데이터구조는 확장성이 떨어진다.(탐색시간이 오래걸린다.)
+
+CFS는 이런 문제를 Red-Black Tree를 도입함으로써 해결한다.
+Red-Block Tree는 Balanced Tree중 하나이다.
+참고로 Balanced Tree는 기본 Tree에 비해서 추가적인 작업이 필요하다.
+트리의 깊이를 낮게 유지해야하며 O(logN)을 유지해야한다
+
+CFS는 모든 Process에 Red-Black Tree를 적용하진 않는다.
+동작중인 Process에게만 Red-Black Tree을 적용한다.
+만약 Sleep 혹은 I/O Request를 하게되면 Red-Black Tree에서 제외되며 다른 곳에서 관리한다.
+
+예를 들어 10개의 작업이 있다고 해보자.
+그리고 각각의 작업들은 `vruntime`값이 `1, 5, 9, 10, 14, 18, 17, 21, 22, 24`이다.
+우리는 해당 작업을 Orderd List로 관리한다.(가정)
+그렇게 되면 다음작업을 쉽게 알 수 있다.
+하지만 만약 작업을 다시 Orderd List에 삽입해야하면 List를 Scan 후 적절한 위치를 찾아야한다. (O(N))
+Red-Black Tree은 해당 작업의 시간은 O(logN)이며 Orderd List보다 더 효율적이다.
+
+![](../assets/images/09-Lottery-Scheduling/figure-9-5.png)
+
+
+### Dealing With I/O And Sleeping Process
+
+만약 가장 낮은 `vruntime`을 가진 작업이 긴 시간동안 Sleep 상태이면 어떻게 해야할까?
+A, B 두 작업이 있다고 가정해보자.
+A는 계속 실행하고 B는 10초 동안 Sleep 상태이다.
+만약 B가 Sleep상태에서 벗어난다면 A보다 vruntime이 10초 적고 한동안은 B만 실행될 것이다.(CPU 독점)
+
+CFS는 이 문제를 `vruntime`을 Sleep상태에서 벗어났을 때 대체함으로써 해결한다.
+CFS는 작업이 Sleep에서 깨어났을때 CFS Tree에서 가장 낮은 `vruntime`보다는 최소한 같게 한다.
+이렇게 함으로써 CFS는 CPU독점을 막을 수 있다. (하지만 Fair하지 않은 부분도 있긴하다.)
